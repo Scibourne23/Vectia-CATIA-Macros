@@ -2,7 +2,7 @@
 
 Vectia is an engineering productivity platform for CATIA V5. This toolkit of powerful macros streamlines critical workflows from initial design to final documentation. It's built to accelerate development, reduce manual error, and empower the modern engineer.
 
-**This project is a personal initiative and is not affiliated with, sponsored, or endorsed by Dassault Systèmes or Visteon.**
+**This project is a personal initiative and is not affiliated with, sponsored, or endorsed by Dassault Systèmes.**
 
 ---
 
