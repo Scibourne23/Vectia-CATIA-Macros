@@ -1,0 +1,177 @@
+' CATScript: Vectia_BoundingBoxCreator_v1.0
+'
+' Purpose: Creates a complete, accurate wireframe bounding box around a selected
+'          Body or HybridBody, aligned to a chosen reference axis system. The
+'          macro generates all necessary construction geometry, places the final
+'          result in a clean "Bounding_Box_Wireframe" geometrical set, and
+'          reports the final dimensions.
+'
+' This is the v1.0 base for the Vectia 3D geometry tools.
+
+Language="VBSCRIPT"
+
+Sub CATMain()
+
+    ' --- 1. SETUP AND ENVIRONMENT CHECK ---
+    On Error Resume Next
+    Dim partDoc
+    Set partDoc = CATIA.ActiveDocument
+    If partDoc Is Nothing Or Err.Number <> 0 Or (InStr(partDoc.Name, ".CATPart") = 0) Then
+        MsgBox "Macro stopped: This script must be run in an active CATPart document.", vbCritical, "Error"
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    Dim thePart: Set thePart = partDoc.Part
+    Dim sel: Set sel = partDoc.Selection
+    sel.Clear
+    Dim hsf: Set hsf = thePart.HybridShapeFactory
+
+    ' --- 2. USER SELECTIONS ---
+    Dim filterArray()
+    ReDim filterArray(1): filterArray(0) = "Body": filterArray(1) = "HybridBody"
+    Dim status
+    status = sel.SelectElement2(filterArray, "1/2: Select the Body or Joined Surface...", False)
+    If status = "Cancel" Then Exit Sub
+    Dim inputObject: Set inputObject = sel.Item(1).Value
+    sel.Clear
+
+    ReDim filterArray(0): filterArray(0) = "AxisSystem"
+    status = sel.SelectElement2(filterArray, "2/2: Select the reference Axis System...", False)
+    If status = "Cancel" Then Exit Sub
+    Dim selAxisSystem: Set selAxisSystem = sel.Item(1).Value
+    sel.Clear
+
+    CATIA.StatusBar = "Starting Bounding Box Creation..."
+    CATIA.DisplayFileAlerts = False
+
+    ' --- 3. CREATE GEOMETRY CONTAINERS (with cleanup) ---
+    On Error Resume Next
+    thePart.HybridBodies.Item("BBox_Construction").Delete
+    thePart.HybridBodies.Item("BoundingBox_Planes").Delete
+    thePart.HybridBodies.Item("BoundingBox_Construction_Lines").Delete
+    thePart.HybridBodies.Item("BoundingBox_Points").Delete
+    thePart.HybridBodies.Item("Bounding_Box_Wireframe").Delete
+    On Error GoTo 0
+    Dim constructionSet: Set constructionSet = thePart.HybridBodies.Add(): constructionSet.Name = "BBox_Construction"
+    Dim finalPlanesSet: Set finalPlanesSet = thePart.HybridBodies.Add(): finalPlanesSet.Name = "BoundingBox_Planes"
+    Dim constructionLinesSet: Set constructionLinesSet = thePart.HybridBodies.Add(): constructionLinesSet.Name = "BoundingBox_Construction_Lines"
+    Dim finalPointsSet: Set finalPointsSet = thePart.HybridBodies.Add(): finalPointsSet.Name = "BoundingBox_Points"
+    Dim finalWireframeSet: Set finalWireframeSet = thePart.HybridBodies.Add(): finalWireframeSet.Name = "Bounding_Box_Wireframe"
+    
+    ' --- 4. CREATE BASE PLANES AND EXTREMUMS ---
+    Dim refInputObject: Set refInputObject = thePart.CreateReferenceFromObject(inputObject)
+    Dim originCoord(2), axisCoord(2)
+    selAxisSystem.GetOrigin originCoord
+    Dim originPoint: Set originPoint = hsf.AddNewPointCoord(originCoord(0), originCoord(1), originCoord(2))
+    Dim XDir, YDir, ZDir
+    selAxisSystem.GetXAxis axisCoord: Set XDir = hsf.AddNewDirectionByCoord(axisCoord(0), axisCoord(1), axisCoord(2))
+    selAxisSystem.GetYAxis axisCoord: Set YDir = hsf.AddNewDirectionByCoord(axisCoord(0), axisCoord(1), axisCoord(2))
+    selAxisSystem.GetZAxis axisCoord: Set ZDir = hsf.AddNewDirectionByCoord(axisCoord(0), axisCoord(1), axisCoord(2))
+    Dim baseYZPlane: Set baseYZPlane = hsf.AddNewPlaneNormal(XDir, originPoint)
+    Dim baseZXPlane: Set baseZXPlane = hsf.AddNewPlaneNormal(YDir, originPoint)
+    Dim baseXYPlane: Set baseXYPlane = hsf.AddNewPlaneNormal(ZDir, originPoint)
+    constructionSet.AppendHybridShape baseYZPlane: constructionSet.AppendHybridShape baseZXPlane: constructionSet.AppendHybridShape baseXYPlane
+    Dim extMaxX: Set extMaxX = hsf.AddNewExtremum(refInputObject, XDir, 1): constructionSet.AppendHybridShape extMaxX
+    Dim extMinX: Set extMinX = hsf.AddNewExtremum(refInputObject, XDir, 0): constructionSet.AppendHybridShape extMinX
+    Dim extMaxY: Set extMaxY = hsf.AddNewExtremum(refInputObject, YDir, 1): constructionSet.AppendHybridShape extMaxY
+    Dim extMinY: Set extMinY = hsf.AddNewExtremum(refInputObject, YDir, 0): constructionSet.AppendHybridShape extMinY
+    Dim extMaxZ: Set extMaxZ = hsf.AddNewExtremum(refInputObject, ZDir, 1): constructionSet.AppendHybridShape extMaxZ
+    Dim extMinZ: Set extMinZ = hsf.AddNewExtremum(refInputObject, ZDir, 0): constructionSet.AppendHybridShape extMinZ
+    thePart.Update
+
+    ' --- 5. MEASURE EXTREMUMS TO THE BASE PLANES ---
+    Dim SPAWorkbench: Set SPAWorkbench = partDoc.GetWorkbench("SPAWorkbench")
+    Dim ref_baseYZ: Set ref_baseYZ = thePart.CreateReferenceFromObject(baseYZPlane)
+    Dim ref_baseZX: Set ref_baseZX = thePart.CreateReferenceFromObject(baseZXPlane)
+    Dim ref_baseXY: Set ref_baseXY = thePart.CreateReferenceFromObject(baseXYPlane)
+    Dim distMaxX, distMinX, distMaxY, distMinY, distMaxZ, distMinZ
+    distMaxX = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMaxX)).GetMinimumDistance(ref_baseYZ)
+    distMinX = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMinX)).GetMinimumDistance(ref_baseYZ)
+    distMaxY = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMaxY)).GetMinimumDistance(ref_baseZX)
+    distMinY = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMinY)).GetMinimumDistance(ref_baseZX)
+    distMaxZ = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMaxZ)).GetMinimumDistance(ref_baseXY)
+    distMinZ = SPAWorkbench.GetMeasurable(thePart.CreateReferenceFromObject(extMinZ)).GetMinimumDistance(ref_baseXY)
+    
+    ' --- 6. CREATE FINAL PLANES BY OFFSETTING ---
+    Dim planeMaxX: Set planeMaxX = hsf.AddNewPlaneOffset(ref_baseYZ, distMaxX, False)
+    Dim planeMinX: Set planeMinX = hsf.AddNewPlaneOffset(ref_baseYZ, distMinX, True)
+    Dim planeMaxY: Set planeMaxY = hsf.AddNewPlaneOffset(ref_baseZX, distMaxY, False)
+    Dim planeMinY: Set planeMinY = hsf.AddNewPlaneOffset(ref_baseZX, distMinY, True)
+    Dim planeMaxZ: Set planeMaxZ = hsf.AddNewPlaneOffset(ref_baseXY, distMaxZ, False)
+    Dim planeMinZ: Set planeMinZ = hsf.AddNewPlaneOffset(ref_baseXY, distMinZ, True)
+    finalPlanesSet.AppendHybridShape planeMaxX: finalPlanesSet.AppendHybridShape planeMinX
+    finalPlanesSet.AppendHybridShape planeMaxY: finalPlanesSet.AppendHybridShape planeMinY
+    finalPlanesSet.AppendHybridShape planeMaxZ: finalPlanesSet.AppendHybridShape planeMinZ
+    thePart.Update
+
+    ' --- 7. CREATE CONSTRUCTION LINES AND POINTS ---
+    Dim refPlaneMaxX, refPlaneMinX, refPlaneMaxY, refPlaneMinY, refPlaneMaxZ, refPlaneMinZ
+    Set refPlaneMaxX = thePart.CreateReferenceFromObject(planeMaxX): Set refPlaneMinX = thePart.CreateReferenceFromObject(planeMinX)
+    Set refPlaneMaxY = thePart.CreateReferenceFromObject(planeMaxY): Set refPlaneMinY = thePart.CreateReferenceFromObject(planeMinY)
+    Set refPlaneMaxZ = thePart.CreateReferenceFromObject(planeMaxZ): Set refPlaneMinZ = thePart.CreateReferenceFromObject(planeMinZ)
+    Dim line_Ymin_Zmin: Set line_Ymin_Zmin = hsf.AddNewIntersection(refPlaneMinY, refPlaneMinZ): constructionLinesSet.AppendHybridShape line_Ymin_Zmin
+    Dim line_Ymax_Zmin: Set line_Ymax_Zmin = hsf.AddNewIntersection(refPlaneMaxY, refPlaneMinZ): constructionLinesSet.AppendHybridShape line_Ymax_Zmin
+    Dim line_Ymin_Zmax: Set line_Ymin_Zmax = hsf.AddNewIntersection(refPlaneMinY, refPlaneMaxZ): constructionLinesSet.AppendHybridShape line_Ymin_Zmax
+    Dim line_Ymax_Zmax: Set line_Ymax_Zmax = hsf.AddNewIntersection(refPlaneMaxY, refPlaneMaxZ): constructionLinesSet.AppendHybridShape line_Ymax_Zmax
+    Dim line_Xmin_Zmin: Set line_Xmin_Zmin = hsf.AddNewIntersection(refPlaneMinX, refPlaneMinZ): constructionLinesSet.AppendHybridShape line_Xmin_Zmin
+    Dim line_Xmax_Zmin: Set line_Xmax_Zmin = hsf.AddNewIntersection(refPlaneMaxX, refPlaneMinZ): constructionLinesSet.AppendHybridShape line_Xmax_Zmin
+    Dim line_Xmin_Zmax: Set line_Xmin_Zmax = hsf.AddNewIntersection(refPlaneMinX, refPlaneMaxZ): constructionLinesSet.AppendHybridShape line_Xmin_Zmax
+    Dim line_Xmax_Zmax: Set line_Xmax_Zmax = hsf.AddNewIntersection(refPlaneMaxX, refPlaneMaxZ): constructionLinesSet.AppendHybridShape line_Xmax_Zmax
+    Dim line_Xmin_Ymin: Set line_Xmin_Ymin = hsf.AddNewIntersection(refPlaneMinX, refPlaneMinY): constructionLinesSet.AppendHybridShape line_Xmin_Ymin
+    Dim line_Xmax_Ymin: Set line_Xmax_Ymin = hsf.AddNewIntersection(refPlaneMaxX, refPlaneMinY): constructionLinesSet.AppendHybridShape line_Xmax_Ymin
+    Dim line_Xmin_Ymax: Set line_Xmin_Ymax = hsf.AddNewIntersection(refPlaneMinX, refPlaneMaxY): constructionLinesSet.AppendHybridShape line_Xmin_Ymax
+    Dim line_Xmax_Ymax: Set line_Xmax_Ymax = hsf.AddNewIntersection(refPlaneMaxX, refPlaneMaxY): constructionLinesSet.AppendHybridShape line_Xmax_Ymax
+    thePart.Update
+
+    Dim pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8
+    Set pt1 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymin_Zmin), thePart.CreateReferenceFromObject(line_Xmin_Zmin)): finalPointsSet.AppendHybridShape pt1
+    Set pt2 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymax_Zmin), thePart.CreateReferenceFromObject(line_Xmin_Zmin)): finalPointsSet.AppendHybridShape pt2
+    Set pt3 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymin_Zmax), thePart.CreateReferenceFromObject(line_Xmin_Zmax)): finalPointsSet.AppendHybridShape pt3
+    Set pt4 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymax_Zmax), thePart.CreateReferenceFromObject(line_Xmin_Zmax)): finalPointsSet.AppendHybridShape pt4
+    Set pt5 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymin_Zmin), thePart.CreateReferenceFromObject(line_Xmax_Zmin)): finalPointsSet.AppendHybridShape pt5
+    Set pt6 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymax_Zmin), thePart.CreateReferenceFromObject(line_Xmax_Zmin)): finalPointsSet.AppendHybridShape pt6
+    Set pt7 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymin_Zmax), thePart.CreateReferenceFromObject(line_Xmax_Zmax)): finalPointsSet.AppendHybridShape pt7
+    Set pt8 = hsf.AddNewIntersection(thePart.CreateReferenceFromObject(line_Ymax_Zmax), thePart.CreateReferenceFromObject(line_Xmax_Zmax)): finalPointsSet.AppendHybridShape pt8
+    thePart.Update
+    
+    ' --- 8. CREATE FINAL WIREFRAME BY JOINING POINTS ---
+    Dim ref_pt1, ref_pt2, ref_pt3, ref_pt4, ref_pt5, ref_pt6, ref_pt7, ref_pt8
+    Set ref_pt1 = thePart.CreateReferenceFromObject(pt1): Set ref_pt2 = thePart.CreateReferenceFromObject(pt2): Set ref_pt3 = thePart.CreateReferenceFromObject(pt3): Set ref_pt4 = thePart.CreateReferenceFromObject(pt4)
+    Set ref_pt5 = thePart.CreateReferenceFromObject(pt5): Set ref_pt6 = thePart.CreateReferenceFromObject(pt6): Set ref_pt7 = thePart.CreateReferenceFromObject(pt7): Set ref_pt8 = thePart.CreateReferenceFromObject(pt8)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt1, ref_pt2)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt2, ref_pt6)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt6, ref_pt5)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt5, ref_pt1)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt3, ref_pt4)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt4, ref_pt8)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt8, ref_pt7)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt7, ref_pt3)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt1, ref_pt3)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt5, ref_pt7)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt2, ref_pt4)
+    finalWireframeSet.AppendHybridShape hsf.AddNewLinePtPt(ref_pt6, ref_pt8)
+    
+    ' --- 9. CALCULATE FINAL DIMENSIONS ---
+    Dim lengthX: lengthX = distMaxX + distMinX
+    Dim widthY: widthY = distMaxY + distMinY
+    Dim heightZ: heightZ = distMaxZ + distMinZ
+    
+    ' --- 10. HIDE CONSTRUCTION GEOMETRY ---
+    sel.Clear: sel.Add constructionSet: sel.VisProperties.SetShow catVisPropertyNoShowAttr
+    sel.Clear: sel.Add finalPlanesSet: sel.VisProperties.SetShow catVisPropertyNoShowAttr
+    sel.Clear: sel.Add constructionLinesSet: sel.VisProperties.SetShow catVisPropertyNoShowAttr
+    sel.Clear: sel.Add finalPointsSet: sel.VisProperties.SetShow catVisPropertyNoShowAttr
+    sel.Clear
+    
+    ' --- 11. FINALIZE ---
+    thePart.Update
+    thePart.InWorkObject = finalWireframeSet
+    CATIA.DisplayFileAlerts = True
+
+    MsgBox "Bounding Box Wireframe Created." & vbCrLf & vbCrLf & _
+           "Length (X): " & CStr(lengthX) & " mm" & vbCrLf & _
+           "Width (Y): " & CStr(widthY) & " mm" & vbCrLf & _
+           "Height (Z): " & CStr(heightZ) & " mm", vbInformation, "Vectia - Creation Complete"
+
+End Sub

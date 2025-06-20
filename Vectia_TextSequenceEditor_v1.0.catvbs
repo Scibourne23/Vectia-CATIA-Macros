@@ -1,0 +1,103 @@
+' CATScript: Vectia_TextSequenceEditor_v1.0
+'
+' Purpose: A simple utility for quickly renumbering a series of selected
+'          DrawingText objects with a prefix and a sequential number.
+'
+' This is the v1.0 base for the Vectia text editing tools.
+
+Option Explicit
+
+Sub CATMain()
+
+    ' --- Variable Declarations ---
+    Dim oCATIA, oDrwDocument, oSelection, selectedItem, oDrawingText
+    Dim sPrefix, lStartNumber, sInputStartNumber, currentNumber
+    Dim initialNumStrLength
+    Dim i, textsUpdatedCount, itemsSkippedCount
+    Dim sFormattedNumber, summaryMsg, userChoice
+
+    ' --- Application Setup ---
+    On Error Resume Next
+    Set oCATIA = GetObject(,"CATIA.Application")
+    If Err.Number <> 0 Then MsgBox "CRITICAL ERROR: Could not get CATIA Application object.", vbCritical: Exit Sub
+    On Error GoTo 0
+
+    Set oDrwDocument = oCATIA.ActiveDocument
+    If oDrwDocument Is Nothing Then MsgBox "ERROR: No active document found.", vbExclamation: Exit Sub
+    If TypeName(oDrwDocument) <> "DrawingDocument" Then MsgBox "ERROR: Active document is not a Drawing Document.", vbCritical: Exit Sub
+
+    ' --- Get User Inputs ---
+    
+    ' Step 1: Ask if a prefix is needed
+    userChoice = MsgBox("Do you want to add a constant text prefix?" & vbCrLf & "(e.g., 'P' to get P1, P2...)", vbYesNoCancel + vbQuestion, "Vectia Text Sequence Editor - Use Prefix?")
+    
+    If userChoice = vbCancel Then Exit Sub ' User cancelled
+    
+    sPrefix = "" ' Default to no prefix
+    If userChoice = vbYes Then
+        sPrefix = InputBox("Enter the constant text prefix:", "Text Prefix")
+    End If
+
+    ' Step 2: Get Starting Number
+    Do
+        sInputStartNumber = InputBox("Enter the starting number for the sequence:" & vbCrLf & _
+                                     "(e.g., 1 for P1, or 01 for P01, or 001 for P001...)", "Starting Number", "1")
+        If sInputStartNumber = "" Then Exit Sub ' User cancelled
+        
+        If IsNumeric(sInputStartNumber) Then
+            lStartNumber = CLng(sInputStartNumber)
+            ' Store the length of the user's input to preserve leading zeros
+            initialNumStrLength = Len(sInputStartNumber)
+            Exit Do
+        Else
+            MsgBox "Invalid input. Please enter a numeric value.", vbExclamation
+        End If
+    Loop
+    currentNumber = lStartNumber
+
+    ' --- Process Pre-selected Texts ---
+    Set oSelection = oDrwDocument.Selection
+    If oSelection.Count = 0 Then MsgBox "No items selected. Please select DrawingText objects before running.", vbExclamation: Exit Sub
+
+    textsUpdatedCount = 0
+    itemsSkippedCount = 0
+    oCATIA.StatusBar = "Processing " & oSelection.Count & " selected items..."
+
+    For i = 1 To oSelection.Count
+        Set selectedItem = oSelection.Item(i).Value
+
+        If TypeName(selectedItem) = "DrawingText" Then
+            Set oDrawingText = selectedItem
+            
+            ' Format the number to respect leading zeros from user input
+            Dim sCurrentNumAsStr
+            sCurrentNumAsStr = CStr(currentNumber)
+            
+            If Len(sCurrentNumAsStr) < initialNumStrLength Then
+                sFormattedNumber = String(initialNumStrLength - Len(sCurrentNumAsStr), "0") & sCurrentNumAsStr
+            Else
+                sFormattedNumber = sCurrentNumAsStr
+            End If
+
+            oDrawingText.Text = sPrefix & sFormattedNumber
+            
+            textsUpdatedCount = textsUpdatedCount + 1
+            currentNumber = currentNumber + 1
+        Else
+            itemsSkippedCount = itemsSkippedCount + 1
+        End If
+    Next ' i
+
+    oCATIA.StatusBar = "Text update complete."
+    
+    ' --- Final Report ---
+    summaryMsg = "Sequential Text Editing Finished." & vbCrLf & vbCrLf & _
+                 textsUpdatedCount & " DrawingText object(s) updated."
+    If itemsSkippedCount > 0 Then
+        summaryMsg = summaryMsg & vbCrLf & itemsSkippedCount & " non-DrawingText item(s) were skipped."
+    End If
+    
+    MsgBox summaryMsg, vbInformation, "Macro Complete"
+
+    Set oCATIA = Nothing
+End Sub

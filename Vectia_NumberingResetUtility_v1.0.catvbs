@@ -1,0 +1,106 @@
+' CATScript: Vectia_NumberingResetUtility_v1.0
+'
+' Purpose: A powerful cleanup tool for resetting VVNN numbering on a drawing.
+'          This script modifies the BaultText (for Dims) or Upper Text (for GDTs)
+'          to remove previously added numbering, preparing the drawing for
+'          renumbering or a new revision.
+'
+' This is the v1.0 base for the Vectia drawing cleanup tools.
+
+Option Explicit
+
+' =================================================================================================
+' Main Subroutine
+' =================================================================================================
+Sub CATMain()
+
+    ' --- Final Confirmation before Deleting ---
+    Dim confirmResponse
+    confirmResponse = MsgBox("This macro will remove all [VVNN] style numbering from the Bault Text of all dimensions and the Upper Text of all GDTs on the active sheet." & vbCrLf & vbCrLf & _
+                             "This action cannot be undone." & vbCrLf & vbCrLf & "Continue?", vbYesNo + vbQuestion, "Vectia Numbering Reset Utility - Final Confirmation")
+    If confirmResponse = vbNo Then
+        MsgBox "Operation cancelled.", vbInformation, "Cancelled": Exit Sub
+    End If
+
+    ' --- Get CATIA objects ---
+    Dim oCATIA: Set oCATIA = CATIA
+    Dim oDrwDocument: Set oDrwDocument = oCATIA.ActiveDocument
+    If TypeName(oDrwDocument) <> "DrawingDocument" Then MsgBox "Active document is not a Drawing.", vbCritical: Exit Sub
+    
+    CATIA.StatusBar = "Scanning drawing for items to reset..."
+    
+    ' --- Process All Views on the Active Sheet ---
+    Dim oActiveSheet: Set oActiveSheet = oDrwDocument.Sheets.ActiveSheet
+    Dim oViews: Set oViews = oActiveSheet.Views
+    Dim oView, i, itemsResetCount
+    itemsResetCount = 0
+    
+    For i = 1 To oViews.Count
+        Set oView = oViews.Item(i)
+        
+        ' Process Dimensions in the view
+        Dim oDimensions, oDim, j
+        Set oDimensions = oView.Dimensions
+        For j = 1 To oDimensions.Count
+            Set oDim = oDimensions.Item(j)
+            Dim oDimValue: Set oDimValue = oDim.GetValue()
+            If Not oDimValue Is Nothing Then
+                Dim beforeText, afterText, upperText, lowerText
+                oDimValue.GetBaultText 1, beforeText, afterText, upperText, lowerText
+                If IsBracketedNumber(upperText) Then
+                    oDimValue.SetBaultText 1, beforeText, afterText, "", lowerText
+                    itemsResetCount = itemsResetCount + 1
+                End If
+            End If
+        Next
+        
+        ' Process GDTs in the view
+        Dim oGDTs, oGDT, k
+        Set oGDTs = oView.GDTs
+        For k = 1 To oGDTs.Count
+            Set oGDT = oGDTs.Item(k)
+            Dim oGDTUpperText: Set oGDTUpperText = oGDT.GetTextRange(0, 0)
+            If Not oGDTUpperText Is Nothing Then
+                If IsBracketedNumber(oGDTUpperText.Text) Then
+                    oGDTUpperText.Text = ""
+                    oGDT.TextProperties.Update
+                    itemsResetCount = itemsResetCount + 1
+                End If
+            End If
+        Next
+    Next
+
+    ' --- Final Report ---
+    If itemsResetCount > 0 Then
+        MsgBox "Reset complete." & vbCrLf & vbCrLf & "Successfully reset " & itemsResetCount & " items.", vbInformation, "Reset Complete"
+    Else
+        MsgBox "No matching [VVNN] numbering was found on the active sheet.", vbInformation, "Nothing to Reset"
+    End If
+
+    CATIA.StatusBar = "Ready"
+    Set oActiveSheet = Nothing: Set oDrwDocument = Nothing: Set oCATIA = Nothing
+End Sub
+
+
+' --- Function to check if a string is a bracketed VVNN number ---
+Private Function IsBracketedNumber(ByVal sInput)
+    IsBracketedNumber = False
+    Dim sCleaned: sCleaned = Trim(sInput)
+    
+    ' Check if it's enclosed in brackets and has a minimum length
+    If Left(sCleaned, 1) = "[" And Right(sCleaned, 1) = "]" And Len(sCleaned) >= 6 Then
+        Dim content: content = Mid(sCleaned, 2, Len(sCleaned) - 2)
+        
+        ' Check for single number format like [0101]
+        If Len(content) = 4 And IsNumeric(content) Then
+            IsBracketedNumber = True
+            Exit Function
+        End If
+        
+        ' Check for range formats like [0101,0102] or [0101,..,0104]
+        If InStr(content, ",") > 0 Then
+            IsBracketedNumber = True ' A simple comma is enough evidence for this purpose
+            Exit Function
+        End If
+    End If
+End Function

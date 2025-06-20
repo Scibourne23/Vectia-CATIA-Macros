@@ -1,0 +1,169 @@
+' CATScript: Vectia_DrawingResetUtility_v1.0
+'
+' Purpose: A powerful cleanup tool for removing specific annotations from a drawing.
+'          It can target VVNN numbering text and/or revision balloons, and can
+'          operate on the active view only or the entire sheet.
+'
+' This is the v1.0 base for the Vectia drawing cleanup tools.
+
+Option Explicit
+
+Sub CATMain()
+
+    ' --- Flags to control the macro's behavior ---
+    Dim bRemoveDims, bRemoveRevs, bScopeActiveViewOnly
+    bRemoveDims = False
+    bRemoveRevs = False
+    bScopeActiveViewOnly = False
+
+    ' --- STEP 1: Get the main action from the user ---
+    Dim mainPrompt, mainChoice
+    mainPrompt = "Please choose an action:" & vbCrLf & vbCrLf & _
+                 "   1  =  Remove Both (Dims & Rev Balloons)" & vbCrLf & _
+                 "   2  =  Remove Dimension Numbers ONLY" & vbCrLf & _
+                 "   3  =  Remove Revision Balloons ONLY (A - AC series)"
+
+    mainChoice = InputBox(mainPrompt, "Vectia Drawing Reset Utility - Step 1 of 2")
+
+    ' --- Handle user's main choice ---
+    Select Case mainChoice
+        Case "1": bRemoveDims = True: bRemoveRevs = True
+        Case "2": bRemoveDims = True: bRemoveRevs = False
+        Case "3": bRemoveDims = False: bRemoveRevs = True
+        Case "": MsgBox "Operation cancelled.", vbInformation, "Cancelled": Exit Sub
+        Case Else: MsgBox "Invalid input. Enter 1, 2, or 3.", vbCritical, "Error": Exit Sub
+    End Select
+
+    ' --- STEP 2: If user chose to remove dims, ask for the scope ---
+    ' This only applies if the user is removing ONLY dimension numbers.
+    ' If removing both, we assume the scope is the entire sheet for safety and completeness.
+    If mainChoice = "2" Then
+        Dim scopePrompt, scopeChoice
+        scopePrompt = "For Dimension Numbers, please choose the scope:" & vbCrLf & vbCrLf & _
+                      "   1  =  In Active View ONLY" & vbCrLf & _
+                      "   2  =  In All Views on Sheet"
+        scopeChoice = InputBox(scopePrompt, "Vectia Drawing Reset Utility - Step 2 of 2")
+        Select Case scopeChoice
+            Case "1": bScopeActiveViewOnly = True
+            Case "2": bScopeActiveViewOnly = False
+            Case "": MsgBox "Operation cancelled.", vbInformation, "Cancelled": Exit Sub
+            Case Else: MsgBox "Invalid input. Enter 1 or 2.", vbCritical, "Error": Exit Sub
+        End Select
+    End If
+
+    ' --- Final Confirmation before Deleting ---
+    Dim confirmResponse
+    confirmResponse = MsgBox("Ready to delete the selected items." & vbCrLf & "This action cannot be undone." & vbCrLf & vbCrLf & "Continue?", vbYesNo + vbQuestion, "Final Confirmation")
+    If confirmResponse = vbNo Then
+        MsgBox "Operation cancelled.", vbInformation, "Cancelled": Exit Sub
+    End If
+
+    ' --- Get CATIA objects ---
+    Dim oCATIA: Set oCATIA = CATIA
+    Dim oDrwDocument: Set oDrwDocument = oCATIA.ActiveDocument
+    If TypeName(oDrwDocument) <> "DrawingDocument" Then MsgBox "Active document is not a Drawing.", vbCritical: Exit Sub
+    Dim oSelection: Set oSelection = oDrwDocument.Selection
+    oSelection.Clear
+    CATIA.StatusBar = "Scanning drawing for items to delete..."
+    
+    ' --- Process Views based on User Choices ---
+    Dim oActiveSheet: Set oActiveSheet = oDrwDocument.Sheets.ActiveSheet
+    If bScopeActiveViewOnly Then
+        Dim oActiveView: Set oActiveView = oActiveSheet.Views.ActiveView
+        ProcessView oActiveView, bRemoveDims, bRemoveRevs, oSelection
+    Else
+        Dim oViews: Set oViews = oActiveSheet.Views
+        Dim oView, i
+        For i = 1 To oViews.Count
+            Set oView = oViews.Item(i)
+            ProcessView oView, bRemoveDims, bRemoveRevs, oSelection
+        Next
+    End If
+
+    ' --- Perform Deletion ---
+    Dim itemsDeletedCount: itemsDeletedCount = oSelection.Count
+    If itemsDeletedCount > 0 Then
+        oSelection.Delete
+        MsgBox "Deletion complete." & vbCrLf & vbCrLf & "Successfully removed " & itemsDeletedCount & " items.", vbInformation, "Reset Complete"
+    Else
+        MsgBox "No matching items were found based on your selection.", vbInformation, "Nothing to Delete"
+    End If
+
+    CATIA.StatusBar = "Ready"
+    Set oSelection = Nothing: Set oActiveSheet = Nothing: Set oDrwDocument = Nothing: Set oCATIA = Nothing
+End Sub
+
+
+' --- Helper Sub to process a single view ---
+Private Sub ProcessView(ByVal iView, ByVal iCheckDims, ByVal iCheckRevs, ByVal ioSelection)
+    Dim oTexts: Set oTexts = iView.Texts
+    Dim oText, j
+    For j = 1 To oTexts.Count
+        Set oText = oTexts.Item(j)
+        If iCheckDims And IsDimensionNumberingText(oText.Text) Then
+            ioSelection.Add oText
+        ElseIf iCheckRevs And IsRevisionBalloonText(oText.Text) Then
+            ioSelection.Add oText
+        End If
+    Next
+End Sub
+
+
+' --- Function to check for Dimension Numbers ---
+Private Function IsDimensionNumberingText(ByVal sInput)
+    IsDimensionNumberingText = False
+    Dim sCleanedInput : sCleanedInput = Trim(sInput)
+    If InStr(sCleanedInput, ",..,") > 0 Then
+        Dim parts : parts = Split(sCleanedInput, ",..,")
+        If UBound(parts) = 1 And Len(Trim(parts(0))) = 4 And IsNumeric(Trim(parts(0))) And Len(Trim(parts(1))) >= 2 And IsNumeric(Trim(parts(1))) Then IsDimensionNumberingText = True: Exit Function
+    ElseIf InStr(sCleanedInput, ",") > 0 Then
+        Dim pairParts : pairParts = Split(sCleanedInput, ",")
+        If UBound(pairParts) = 1 And Len(Trim(pairParts(0))) = 4 And IsNumeric(Trim(pairParts(0))) And Len(Trim(pairParts(1))) >= 2 And IsNumeric(Trim(pairParts(1))) Then IsDimensionNumberingText = True: Exit Function
+    Else
+        If Len(sCleanedInput) = 4 And IsNumeric(sCleanedInput) Then IsDimensionNumberingText = True: Exit Function
+    End If
+End Function
+
+
+' --- Function to check for Revision Balloons ---
+Private Function IsRevisionBalloonText(ByVal sInput)
+    IsRevisionBalloonText = False
+    
+    Dim sCleaned: sCleaned = UCase(Trim(sInput))
+    If Len(sCleaned) = 0 Then Exit Function
+
+    Dim letterPart, numberPart, i, splitIndex
+    splitIndex = 0
+    For i = 1 To Len(sCleaned)
+        If IsNumeric(Mid(sCleaned, i, 1)) Then
+            splitIndex = i
+            Exit For
+        End If
+    Next
+
+    If splitIndex = 0 Then
+        letterPart = sCleaned
+        numberPart = ""
+    Else
+        letterPart = Left(sCleaned, splitIndex - 1)
+        numberPart = Mid(sCleaned, splitIndex)
+    End If
+
+    If Len(numberPart) > 0 Then
+        If Not IsNumeric(numberPart) Then Exit Function
+    End If
+    
+    If Len(letterPart) = 0 Then Exit Function
+    If Len(letterPart) < 1 Or Len(letterPart) > 2 Then Exit Function
+
+    Dim firstChar: firstChar = Left(letterPart, 1)
+    If firstChar < "A" Or firstChar > "C" Then Exit Function
+    If IsNumeric(firstChar) Then Exit Function
+
+    If Len(letterPart) = 2 Then
+        Dim secondChar: secondChar = Right(letterPart, 1)
+        If secondChar < "A" Or secondChar > "Z" Then Exit Function
+    End If
+    
+    IsRevisionBalloonText = True
+End Function

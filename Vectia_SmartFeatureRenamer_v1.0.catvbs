@@ -1,0 +1,127 @@
+' CATScript: Vectia_SmartFeatureRenamer_v1.0
+'
+' Purpose: A versatile tool for sequentially renaming any selected features
+'          in the specification tree (Points, Surfaces, Planes, etc.). It
+'          intelligently handles leading zeros based on the user's starting
+'          number and allows for an optional text prefix.
+'
+' This is the v1.0 base for the Vectia 3D utility tools.
+
+Option Explicit
+
+Sub CATMain()
+
+    ' --- Variable Declarations ---
+    Dim oPartDoc, oPart, oSelection, oSelectedItem
+    Dim sPrefix, sStartNumberStr, lStartNumber, lCurrentNumber, initialNumStrLength
+    Dim i, itemsRenamed
+    Dim sOriginalName, bHasNameProperty, sFormattedNumber, sNewName
+    Dim userChoice
+    
+    ' --- 1. Get the active document and Part ---
+    On Error Resume Next
+    Set oPartDoc = CATIA.ActiveDocument
+    If Err.Number <> 0 Or oPartDoc Is Nothing Then
+        MsgBox "No CATIA document is currently active.", vbExclamation, "Error"
+        Exit Sub
+    End If
+    If TypeName(oPartDoc) <> "PartDocument" Then
+        MsgBox "The active document is not a CATPart.", vbExclamation, "Error"
+        Exit Sub
+    End If
+    Set oPart = oPartDoc.Part
+    If oPart Is Nothing Then
+        MsgBox "Could not retrieve Part object from the document.", vbCritical, "Critical Error"
+        Exit Sub
+    End If
+    On Error GoTo 0
+
+    ' --- 2. Get user inputs ---
+    userChoice = MsgBox("Do you want to add a constant text prefix?" & vbCrLf & "(e.g., 'PT_' to get PT_01, PT_02...)", vbYesNoCancel + vbQuestion, "Vectia Smart Renamer - Use Prefix?")
+    
+    If userChoice = vbCancel Then Exit Sub
+    
+    sPrefix = ""
+    If userChoice = vbYes Then
+        sPrefix = InputBox("Enter the prefix for the new names (e.g., PT_, SURF_):", "Enter Prefix")
+        If sPrefix = "" And userChoice = vbYes Then
+            ' User clicked OK without entering text, which is fine
+        End If
+    End If
+
+    sStartNumberStr = InputBox("Enter the starting number (e.g., 1, 01, 001):", "Enter Start Number", "1")
+    If sStartNumberStr = "" Then
+        MsgBox "Start number cannot be empty. Operation cancelled.", vbExclamation
+        Exit Sub
+    End If
+
+    If Not IsNumeric(sStartNumberStr) Then
+        MsgBox "Starting number must be a valid number. Operation cancelled.", vbExclamation
+        Exit Sub
+    End If
+    
+    lStartNumber = CLng(sStartNumberStr)
+    lCurrentNumber = lStartNumber
+    initialNumStrLength = Len(sStartNumberStr)
+
+    ' --- 3. Get current selection ---
+    Set oSelection = oPartDoc.Selection
+    If oSelection.Count = 0 Then
+        MsgBox "No elements selected. Please select elements in the specification tree to rename.", vbInformation, "No Selection"
+        Exit Sub
+    End If
+    
+    itemsRenamed = 0
+    CATIA.StatusBar = "Processing " & oSelection.Count & " selected items..."
+
+    ' --- 4. Iterate and Rename selected items ---
+    For i = 1 To oSelection.Count
+        Set oSelectedItem = Nothing
+        On Error Resume Next
+        Set oSelectedItem = oSelection.Item(i).Value
+        On Error GoTo 0
+
+        If Not oSelectedItem Is Nothing Then
+            bHasNameProperty = False
+            sOriginalName = ""
+            
+            On Error Resume Next
+            sOriginalName = oSelectedItem.Name
+            If Err.Number = 0 Then bHasNameProperty = True
+            Err.Clear
+            On Error GoTo 0
+
+            If bHasNameProperty Then
+                Dim sCurrentNumAsStr
+                sCurrentNumAsStr = CStr(lCurrentNumber)
+                
+                ' Format the number to respect leading zeros
+                If Len(sCurrentNumAsStr) < initialNumStrLength Then
+                    sFormattedNumber = String(initialNumStrLength - Len(sCurrentNumAsStr), "0") & sCurrentNumAsStr
+                Else
+                    sFormattedNumber = sCurrentNumAsStr
+                End If
+                
+                sNewName = sPrefix & sFormattedNumber
+                
+                On Error Resume Next
+                oSelectedItem.Name = sNewName
+                If Err.Number = 0 Then
+                    itemsRenamed = itemsRenamed + 1
+                    lCurrentNumber = lCurrentNumber + 1
+                End If
+                On Error GoTo 0
+                
+            End If
+        End If
+    Next
+
+    ' --- 5. Update the Part ---
+    If itemsRenamed > 0 Then
+        oPart.Update
+    End If
+
+    ' --- 6. Feedback to user ---
+    MsgBox itemsRenamed & " out of " & oSelection.Count & " selected item(s) were successfully renamed.", vbInformation, "Rename Complete"
+
+End Sub

@@ -1,0 +1,314 @@
+' CATScript: Vectia_BaultTextNumbering_v1.0
+'
+' Purpose: An intelligent tool for editing existing drawings. It analyzes a selection
+'          of Dimensions/GDTs and adds/updates VVNN numbering by modifying the
+'          BaultText (for Dims) or Upper Text (for GDTs). It scans for existing
+'          numbers to continue the sequence correctly.
+'
+' This is the v1.0 base for the Vectia Bault Text editing tools.
+
+Option Explicit
+
+' =================================================================================================
+' Main Subroutine
+' =================================================================================================
+Sub CATMain()
+
+    ' --- Variable Declarations ---
+    Dim oCATIA, oDrwDocument, oActiveSheet, oAllViews, oSelection
+    Dim viewDataMap
+    Dim i_sel, selectedItem, parentView, parentViewName
+    Dim userStartVV, userInput, useShortFormat, userChoice
+    Dim processedViewCounter, currentVV, sViewIndexPadded
+    Dim scanErrors, maxExistingNN
+    Dim viewData
+    Dim summaryLog, totalItemsNumbered_overall, totalErrorsEncountered_overall
+    
+    ' --- Memory variables for context-aware numbering ---
+    Dim lastItemWasMultiInstance, lastNValue, lastDimInfo
+    lastItemWasMultiInstance = False
+    lastNValue = 1
+    lastDimInfo = ""
+
+    ' --- Basic CATIA Application Setup ---
+    Set oCATIA = CATIA
+    Set oDrwDocument = oCATIA.ActiveDocument
+    If TypeName(oDrwDocument) <> "DrawingDocument" Then MsgBox "Active doc must be a Drawing.", vbCritical: Exit Sub
+    Set oActiveSheet = oDrwDocument.Sheets.ActiveSheet
+    Set oAllViews = oActiveSheet.Views
+    
+    ' --- User prompt to select the numbering format ---
+    userChoice = MsgBox("Use 'Short Format' for multi-instance notes?" & vbCrLf & vbCrLf & _
+                        "  Yes = 0101,..,04" & vbCrLf & _
+                        "  No  = 0101,..,0104", vbYesNo + vbQuestion, "Select Numbering Format")
+    If userChoice = vbYes Then
+        useShortFormat = True
+    Else
+        useShortFormat = False
+    End If
+
+    ' --- Get User Input for Starting VV ---
+    Do
+        userInput = InputBox("Please enter the starting view number (VV) for numbering.", "Enter Starting VV", "1")
+        If userInput = "" Then MsgBox "Operation cancelled.": Exit Sub
+        If IsNumeric(userInput) And CLng(userInput) > 0 Then
+            userStartVV = CLng(userInput)
+            Exit Do
+        Else
+            MsgBox "Invalid input. Please enter a positive whole number.", vbExclamation
+        End If
+    Loop
+
+    ' --- Get User Selection ---
+    Set oSelection = oDrwDocument.Selection
+    If oSelection.Count = 0 Then MsgBox "No items selected. Exiting.", vbExclamation: Exit Sub
+
+    ' --- Pre-Scan all views to prepare numbering sequences ---
+    Set viewDataMap = CreateObject("Scripting.Dictionary")
+    scanErrors = 0
+    processedViewCounter = 0
+    
+    For i_sel = 1 To oSelection.Count
+        Set selectedItem = oSelection.Item(i_sel).Value
+        If TypeName(selectedItem) = "DrawingDimension" Or TypeName(selectedItem) = "DrawingGDT" Then
+            Set parentView = FindParentViewOf(selectedItem, oAllViews)
+            If Not parentView Is Nothing Then
+                parentViewName = parentView.Name
+                If Not viewDataMap.Exists(parentViewName) Then
+                    processedViewCounter = processedViewCounter + 1
+                    currentVV = userStartVV + processedViewCounter - 1
+                    sViewIndexPadded = Right("0" & CStr(currentVV), 2)
+                    maxExistingNN = ScanViewForMaxNN(parentView, sViewIndexPadded, scanErrors)
+                    
+                    Set viewData = CreateObject("Scripting.Dictionary")
+                    viewData.Add "VV_Prefix", sViewIndexPadded
+                    viewData.Add "NextNN", maxExistingNN + 1
+                    viewDataMap.Add parentViewName, viewData
+                End If
+            End If
+        End If
+    Next
+    If viewDataMap.Count = 0 Then MsgBox "No valid items found in processable views.", vbInformation : Exit Sub
+
+    ' --- Main Processing Loop - In Selection Order ---
+    summaryLog = "--- Bault Text Numbering Finished ---" & vbCrLf & vbCrLf
+    totalItemsNumbered_overall = 0
+    totalErrorsEncountered_overall = 0
+
+    For i_sel = 1 To oSelection.Count
+        Set selectedItem = oSelection.Item(i_sel).Value
+        Set parentView = FindParentViewOf(selectedItem, oAllViews)
+        
+        If Not parentView Is Nothing Then
+            parentViewName = parentView.Name
+            If viewDataMap.Exists(parentViewName) Then
+                Set viewData = viewDataMap.Item(parentViewName)
+                Dim vv_prefix, currentSequenceNN, itemsNumbered, N_for_this_item
+                vv_prefix = viewData("VV_Prefix")
+                currentSequenceNN = viewData("NextNN")
+                
+                ProcessOneItem selectedItem, vv_prefix, currentSequenceNN, itemsNumbered, N_for_this_item, lastItemWasMultiInstance, lastNValue, lastDimInfo, useShortFormat
+                
+                If itemsNumbered > 0 Then
+                    totalItemsNumbered_overall = totalItemsNumbered_overall + 1
+                    viewData("NextNN") = currentSequenceNN + N_for_this_item
+                Else
+                    totalErrorsEncountered_overall = totalErrorsEncountered_overall + 1
+                End If
+            End If
+        End If
+    Next
+
+    ' --- Final Report ---
+    summaryLog = summaryLog & "Processing complete." & vbCrLf
+    summaryLog = summaryLog & "Total Items Numbered Successfully: " & totalItemsNumbered_overall & vbCrLf
+    summaryLog = summaryLog & "Total Errors: " & totalErrorsEncountered_overall
+    MsgBox summaryLog, vbInformation, "Macro Finished"
+
+    oSelection.Clear
+    Set oCATIA = Nothing
+End Sub
+
+' =================================================================================================
+' Helper Sub: ProcessOneItem
+' =================================================================================================
+Private Sub ProcessOneItem(ByVal iItem, ByVal iViewPrefix, ByRef ioStartNN, ByRef oItemsProcessed, ByRef oN_Value, ByRef ioLastWasMulti, ByRef ioLastN, ByRef ioLastDimInfo, ByVal iUseShortFormat)
+    On Error Resume Next
+    oItemsProcessed = 0
+    oN_Value = 1
+    
+    If TypeName(iItem) = "DrawingDimension" Then
+        Dim oDimValue: Set oDimValue = iItem.GetValue()
+        If Not oDimValue Is Nothing Then
+            Dim beforeText: oDimValue.GetBaultText 1, beforeText, "", "", ""
+            Dim xPos: xPos = InStr(UCase(Trim(beforeText)), "X")
+            If xPos > 1 Then
+                Dim numPart: numPart = Trim(Left(Trim(beforeText), xPos - 1))
+                If IsNumeric(numPart) And CLng(numPart) > 0 Then oN_Value = CLng(numPart)
+            End If
+            
+            If oN_Value > 1 Then
+                ioLastWasMulti = True
+                ioLastDimInfo = "Dimension '" & FormatNumber(oDimValue.Value, 2) & "'"
+            Else
+                ioLastWasMulti = False
+                ioLastDimInfo = ""
+            End If
+            ioLastN = oN_Value
+            
+            Dim outputString: outputString = GetFormattedNumberString(iViewPrefix, ioStartNN, oN_Value, iUseShortFormat)
+            oDimValue.SetBaultText 1, beforeText, "", outputString, ""
+            If Err.Number = 0 Then oItemsProcessed = 1
+        End If
+
+    ElseIf TypeName(iItem) = "DrawingGDT" Then
+        If ioLastWasMulti Then
+            If iItem.Leaders.Count = 0 Then
+                oN_Value = ioLastN
+            End If
+        End If
+        ioLastWasMulti = False
+        
+        Dim outputStringGDT: outputStringGDT = GetFormattedNumberString(iViewPrefix, ioStartNN, oN_Value, iUseShortFormat)
+        Dim oGDTUpperText: Set oGDTUpperText = iItem.GetTextRange(0, 0)
+        If Not oGDTUpperText Is Nothing Then
+            oGDTUpperText.Text = outputStringGDT
+            iItem.TextProperties.Update
+            If Err.Number = 0 Then oItemsProcessed = 1
+        End If
+    End If
+    On Error GoTo 0
+End Sub
+
+' =================================================================================================
+' Helper Function: GetFormattedNumberString
+' =================================================================================================
+Private Function GetFormattedNumberString(ByVal iViewPrefix, ByVal iStartNN, ByVal iNumInstances, ByVal iUseShortFormat)
+    Dim startVVNN, endNN
+    startVVNN = FormatSeqNum(iViewPrefix, iStartNN)
+    endNN = iStartNN + iNumInstances - 1
+    
+    If iUseShortFormat Then
+        Select Case iNumInstances
+            Case 1: GetFormattedNumberString = "[" & startVVNN & "]"
+            Case 2: GetFormattedNumberString = "[" & startVVNN & "," & Right("0" & CStr(endNN), 2) & "]"
+            Case Else: GetFormattedNumberString = "[" & startVVNN & ",..," & Right("0" & CStr(endNN), 2) & "]"
+        End Select
+    Else
+        Select Case iNumInstances
+            Case 1: GetFormattedNumberString = "[" & startVVNN & "]"
+            Case 2: GetFormattedNumberString = "[" & startVVNN & "," & FormatSeqNum(iViewPrefix, endNN) & "]"
+            Case Else: GetFormattedNumberString = "[" & startVVNN & ",..," & FormatSeqNum(iViewPrefix, endNN) & "]"
+        End Select
+    End If
+End Function
+
+' =================================================================================================
+' Helper Function: FindParentViewOf
+' =================================================================================================
+Private Function FindParentViewOf(ByVal iSelectedItem, ByVal iAllViews)
+    Set FindParentViewOf = Nothing
+    Dim oView, i, selectedItemName
+    On Error Resume Next
+    selectedItemName = iSelectedItem.Name
+    If Err.Number <> 0 Then selectedItemName = ""
+    On Error GoTo 0
+    For Each oView In iAllViews
+        On Error Resume Next
+        If TypeName(iSelectedItem) = "DrawingDimension" Then
+            If oView.Dimensions.Count > 0 Then
+                For i = 1 To oView.Dimensions.Count
+                    If oView.Dimensions.Item(i) Is iSelectedItem Then
+                        Set FindParentViewOf = oView
+                        Exit Function
+                    End If
+                Next
+            End If
+        ElseIf TypeName(iSelectedItem) = "DrawingGDT" Then
+            If oView.GDTs.Count > 0 And Len(selectedItemName) > 0 Then
+                For i = 1 To oView.GDTs.Count
+                    If oView.GDTs.Item(i).Name = selectedItemName Then
+                        Set FindParentViewOf = oView
+                        Exit Function
+                    End If
+                Next
+            End If
+        End If
+        On Error GoTo 0
+    Next
+End Function
+
+' =================================================================================================
+' Helper Function: ScanViewForMaxNN
+' =================================================================================================
+Private Function ScanViewForMaxNN(ByVal iViewToScan, ByVal iViewPrefix, ByRef ioScanErrors)
+    Dim highestNN, i
+    highestNN = 0
+    On Error Resume Next
+    If iViewToScan.Dimensions.Count > 0 Then
+        For i = 1 To iViewToScan.Dimensions.Count
+            ParseItemForExistingNumber iViewToScan.Dimensions.Item(i), iViewPrefix, highestNN, ioScanErrors
+        Next
+    End If
+    If iViewToScan.GDTs.Count > 0 Then
+        For i = 1 To iViewToScan.GDTs.Count
+            ParseItemForExistingNumber iViewToScan.GDTs.Item(i), iViewPrefix, highestNN, ioScanErrors
+        Next
+    End If
+    ScanViewForMaxNN = highestNN
+End Function
+
+' =================================================================================================
+' Helper Sub: ParseItemForExistingNumber
+' =================================================================================================
+Private Sub ParseItemForExistingNumber(ByVal iScanItem, ByVal iViewPrefix, ByRef ioHighestNN, ByRef ioScanErrors)
+    Dim tempTextToParse, parseSuccess, oDimValueToCheck, oGDTTextRangeScan, content, lastNumStr, nnStr, currentNN_scan, commaPos
+    tempTextToParse = ""
+    parseSuccess = False
+    On Error Resume Next
+    If TypeName(iScanItem) = "DrawingDimension" Then
+        Set oDimValueToCheck = iScanItem.GetValue()
+        If Not oDimValueToCheck Is Nothing Then
+            oDimValueToCheck.GetBaultText 1, "", "", tempTextToParse, ""
+            If Err.Number = 0 Then parseSuccess = True
+        End If
+    ElseIf TypeName(iScanItem) = "DrawingGDT" Then
+        Set oGDTTextRangeScan = iScanItem.GetTextRange(0, 0) ' Check Upper text
+        If Not oGDTTextRangeScan Is Nothing Then
+            tempTextToParse = oGDTTextRangeScan.Text
+            parseSuccess = True
+        End If
+    End If
+    If Err.Number <> 0 Then Err.Clear
+    
+    If parseSuccess And Len(Trim(tempTextToParse)) > 4 And Left(tempTextToParse, 1) = "[" Then
+        content = Mid(tempTextToParse, 2, Len(tempTextToParse) - 2)
+        commaPos = InStrRev(content, ",")
+        If commaPos > 0 Then lastNumStr = Trim(Mid(content, commaPos + 1)) Else lastNumStr = Trim(content)
+        If Len(lastNumStr) >= 4 And Left(lastNumStr, 2) = iViewPrefix And IsNumeric(Right(lastNumStr, 2)) Then
+            currentNN_scan = CLng(Right(lastNumStr, 2))
+            If currentNN_scan > ioHighestNN Then ioHighestNN = currentNN_scan
+        End If
+    ElseIf Not parseSuccess And TypeName(iScanItem) <> "Unknown" Then
+        ioScanErrors = ioScanErrors + 1
+    End If
+    On Error GoTo 0
+End Sub
+
+' =================================================================================================
+' Sub-Helper Function: FormatSeqNum
+' =================================================================================================
+Private Function FormatSeqNum(viewPrefixVV, sequenceNN)
+    FormatSeqNum = viewPrefixVV & Right("0" & CStr(sequenceNN), 2)
+End Function
+
+' =================================================================================================
+' Helper Function: GetGDTTypeName (Not used in core logic, but kept for potential debugging)
+' =================================================================================================
+Private Function GetGDTTypeName(ByVal iCode)
+    Select Case iCode
+        Case 10: GetGDTTypeName = "(Position)"
+        Case 2: GetGDTTypeName = "(Flatness)"
+        Case Else: GetGDTTypeName = "(GDT)"
+    End Select
+End Function

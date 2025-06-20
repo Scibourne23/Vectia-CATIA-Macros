@@ -1,0 +1,111 @@
+' CATScript: Vectia_SceneExploder_v1.0
+'
+' Purpose: Creates a simple, linear exploded view by moving selected parts
+'          in an assembly along a specified global axis (X, Y, or Z).
+'
+' IMPORTANT: This macro directly modifies part positions. It is highly
+'            recommended to run this within the "Enhanced Scene" workbench
+'            to avoid overriding assembly constraints.
+'
+' This is the v1.0 base for the Vectia Assembly Design tools.
+
+Sub CATMain()
+    '==========================================================================
+    ' 1. SETUP & VERIFICATION
+    '==========================================================================
+    On Error Resume Next
+    Dim CATIA: Set CATIA = GetObject(, "CATIA.Application")
+    If Err.Number <> 0 Then MsgBox "Could not connect to CATIA.", vbCritical: Exit Sub
+    
+    ' --- Add usage recommendation at the very beginning ---
+    Dim startConfirmation
+    startConfirmation = MsgBox("This macro will move parts directly." & vbCrLf & vbCrLf & _
+                               "It is RECOMMENDED to run this in the 'Enhanced Scene' workbench to avoid overriding assembly constraints." & vbCrLf & vbCrLf & _
+                               "Do you wish to continue?", vbOKCancel + vbQuestion, "Vectia Scene Exploder - Recommendation")
+
+    If startConfirmation = vbCancel Then
+        Exit Sub
+    End If
+    
+    CATIA.RefreshDisplay = False
+
+    Dim activeDoc: Set activeDoc = CATIA.ActiveDocument
+    If activeDoc Is Nothing Then MsgBox "No active document found.", vbExclamation: CATIA.RefreshDisplay = True: Exit Sub
+    
+    Dim rootProduct: Set rootProduct = activeDoc.Product
+    If rootProduct Is Nothing Then MsgBox "Active document is not an Assembly.", vbExclamation: CATIA.RefreshDisplay = True: Exit Sub
+
+    Dim activeSelection: Set activeSelection = activeDoc.Selection
+    
+    If activeSelection.Count = 0 Then
+        MsgBox "Please select all parts to explode in the tree BEFORE running this macro.", vbExclamation, "No Parts Selected"
+        CATIA.RefreshDisplay = True: Exit Sub
+    End If
+    Dim numParts: numParts = activeSelection.Count
+
+    '==========================================================================
+    ' 2. CONFIRM SELECTION & GATHER INPUTS
+    '==========================================================================
+    Dim selectedProducts()
+    ReDim selectedProducts(numParts)
+    Dim partListMsg: partListMsg = "The following " & numParts & " selected parts will be exploded:" & vbCrLf & vbCrLf
+    Dim i
+    For i = 1 To numParts
+        Set selectedProducts(i) = activeSelection.Item(i).Value
+        partListMsg = partListMsg & i & ". " & selectedProducts(i).PartNumber & vbCrLf
+    Next
+    
+    If MsgBox(partListMsg, vbOKCancel + vbInformation, "Confirm Part Selection") = vbCancel Then
+        CATIA.RefreshDisplay = True: Exit Sub
+    End If
+    
+    Dim explosionAxis, dirVector(2)
+    explosionAxis = UCase(InputBox("Enter the global axis for the explosion (X, Y, or Z):", "Explosion Axis", "X"))
+    
+    Select Case explosionAxis
+        Case "X": dirVector(0) = 1.0: dirVector(1) = 0.0: dirVector(2) = 0.0
+        Case "Y": dirVector(0) = 0.0: dirVector(1) = 1.0: dirVector(2) = 0.0
+        Case "Z": dirVector(0) = 0.0: dirVector(1) = 0.0: dirVector(2) = 1.0
+        Case Else
+            MsgBox "Invalid axis. Please enter X, Y, or Z.", vbCritical: CATIA.RefreshDisplay = True: Exit Sub
+    End Select
+    
+    Dim offsetDistance
+    offsetDistance = InputBox("Enter the spacing distance between parts (mm):", "Explosion Spacing", "100")
+    If Not IsNumeric(offsetDistance) Or offsetDistance <= 0 Then
+        MsgBox "Invalid spacing value. Exiting.", vbExclamation: CATIA.RefreshDisplay = True: Exit Sub
+    End If
+
+    '==========================================================================
+    ' 3. THE EXPLODE LOGIC
+    '==========================================================================
+    Dim medianIndex: medianIndex = CInt(numParts / 2) + 1
+
+    For i = 1 To numParts
+        Dim currentProduct: Set currentProduct = selectedProducts(i)
+        ' Get the 'Movable' object associated with the product's position
+        Dim productMove: Set productMove = currentProduct.Position
+        
+        Dim moveFactor: moveFactor = medianIndex - i
+        Dim translationMagnitude: translationMagnitude = moveFactor * CDbl(offsetDistance)
+        
+        Dim transformationMatrix(11)
+        transformationMatrix(0) = 1.0: transformationMatrix(1) = 0.0: transformationMatrix(2) = 0.0
+        transformationMatrix(3) = 0.0: transformationMatrix(4) = 1.0: transformationMatrix(5) = 0.0
+        transformationMatrix(6) = 0.0: transformationMatrix(7) = 0.0: transformationMatrix(8) = 1.0
+        transformationMatrix(9) = translationMagnitude * dirVector(0)
+        transformationMatrix(10) = translationMagnitude * dirVector(1)
+        transformationMatrix(11) = translationMagnitude * dirVector(2)
+
+        ' Apply the move directly to the product's position
+        productMove.Apply transformationMatrix
+    Next
+
+    '==========================================================================
+    ' 4. FINALIZE
+    '==========================================================================
+    activeSelection.Clear
+    CATIA.RefreshDisplay = True
+    
+    MsgBox "Explosion complete.", vbInformation, "Vectia - Macro Finished"
+End Sub
