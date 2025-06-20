@@ -2,14 +2,25 @@
 
 Vectia is an engineering productivity platform for CATIA V5. This toolkit of powerful macros streamlines critical workflows from initial design to final documentation. It's built to accelerate development, reduce manual error, and empower the modern engineer.
 
+**This project is a personal initiative and is not affiliated with, sponsored, or endorsed by Dassault Systèmes or Visteon.**
+
 ---
 
-## Features
+## Project Philosophy & AI Collaboration
 
-*   **Intelligent Automation:** Scripts are designed with context-aware logic to handle complex scenarios and reduce user prompts.
-*   **Workbench Agnostic:** Provides powerful enhancements across Part Design, Assembly Design, and Drafting workbenches.
-*   **User-Friendly:** Built with clear instructions, user-configurable options, and a focus on stable, predictable results.
-*   **Production-Ready:** Developed and tested to solve real-world challenges in a demanding automotive design environment.
+The core philosophy of Vectia is to solve real-world engineering challenges through intelligent automation. As a Mechanical Design Engineer, I provided the process logic, user experience requirements, and iterative testing based on years of hands-on experience.
+
+**The code structure, syntax, and implementation for these macros were generated in collaboration with an advanced AI assistant.** This project serves as a powerful example of human-AI partnership, combining expert domain knowledge with cutting-edge code generation to create robust, production-ready tools.
+
+---
+
+## Disclaimer
+
+**Please read carefully before use:**
+
+*   **No Warranty:** These macros are provided "as-is", without warranty of any kind, express or implied. The entire risk as to the quality and performance of the scripts is with you. In no event will the author be liable for any damages, including lost profits, lost savings, or other incidental or consequential damages arising out of the use or inability to use these scripts.
+*   **Test in a Safe Environment:** Always test these macros on non-critical, backup files before using them in a production environment.
+*   **Company Policy:** The use of these macros must comply with your organization's IT and IP policies. The author assumes no responsibility for misuse.
 
 ---
 
@@ -19,19 +30,23 @@ The suite is organized by the primary CATIA V5 workbench where the tool is used.
 
 ### Drafting & 2D Annotation
 
-#### 1. Master Text Numbering (`DimNumberingCompStd_v2.txt`)
+#### 1. Master Text Numbering (`Vectia_MasterTextNumbering.catvbs`)
 The flagship macro for creating visually perfect, associative VVNN numbering. It uses a pre-selected text object as a template, ensuring perfect compliance with any custom graphical standard (including custom frames/oblongs).
 *   **How to Use:** Select your "Master Text" object first, then CTRL+select all target Dimensions/GDTs. Run the macro and follow the prompts.
 
-#### 2. Smart Bault/Upper Text Numbering (`DimNumberingReset.txt`)
+#### 2. Smart Bault/Upper Text Numbering (`Vectia_BaultTextNumbering.catvbs`)
 An intelligent tool for editing existing drawings. It scans views for the highest existing VVNN number and continues the sequence by modifying the `BaultText` of dimensions or the `Upper Text` of GDTs.
 *   **How to Use:** Select all target Dimensions and GDTs you wish to number. Run the macro and follow the prompts.
 
-#### 3. Drawing Reset Utility (`ResetDrawingUtility2D.txt`)
+#### 3. Drawing Reset Utility (`Vectia_DrawingResetUtility.catvbs`)
 A powerful cleanup tool for removing specific annotations from a drawing sheet or a single view.
 *   **How to Use:** Run the macro and choose from the menu whether to delete VVNN numbering text, revision balloons, or both, and from which scope (active view or all views).
 
-#### 4. Sequential Text Editor (`TextSequenceEdit2D_v1.txt`)
+#### 4. Numbering Reset Utility (`Vectia_NumberingResetUtility_v1.0.catvbs`)
+A focused cleanup tool that removes all `[VVNN]` style numbering from the Bault Text of dimensions and the Upper Text of GDTs on the active sheet.
+*   **How to Use:** Run the macro and confirm the action.
+
+#### 5. Sequential Text Editor (`Vectia_TextSequenceEditor.catvbs`)
 A simple utility for quickly renumbering a series of selected text objects.
 *   **How to Use:** Select a series of `DrawingText` objects in the desired order. Run the macro and provide a prefix (optional) and a starting number.
 
@@ -39,30 +54,27 @@ A simple utility for quickly renumbering a series of selected text objects.
 
 ### Part Design & 3D Geometry
 
-#### 1. Bounding Box Wireframe Creator (`MakeBoundingBox3D_v1.txt`)
-Creates a complete, accurate wireframe bounding box around a selected Body or HybridBody, aligned to a chosen axis system. The macro creates all necessary construction geometry and places the final result in a clean "Bounding_Box_Wireframe" geometrical set.
+#### 1. Bounding Box Wireframe Creator (`Vectia_BoundingBoxCreator.catvbs`)
+Creates a complete, accurate wireframe bounding box around a selected Body or HybridBody, aligned to a chosen axis system.
 *   **How to Use:** Run the macro and follow the prompts to select the target body and the reference axis system.
 
-#### 2. Extremum Points Creator (`MakeExtremums.txt`)
+#### 2. Extremum Points Creator (`Vectia_ExtremumPointsCreator.catvbs`)
 A focused utility that generates the 6 extremum points (Min/Max for X, Y, Z) for a selected body relative to a reference axis system.
 *   **How to Use:** Run the macro and follow the prompts to select the target body and the reference axis system.
 
-#### 3. Smart Feature Renamer (`SmartRenamingPtsandSurfs_v1.txt`)
-A versatile tool for sequentially renaming any selected features in the specification tree (Points, Surfaces, Planes, etc.). It intelligently handles leading zeros based on the user's starting number.
+#### 3. Smart Feature Renamer (`Vectia_SmartFeatureRenamer.catvbs`)
+A versatile tool for sequentially renaming any selected features in the specification tree. It intelligently handles leading zeros based on the user's starting number.
 *   **How to Use:** Select the features you want to rename in the desired order. Run the macro and provide a prefix (optional) and a starting number (e.g., `1`, `01`, `001`).
 
 ---
 
 ### Assembly Design
 
-#### 1. Simple 3D Explode Scene (`ExplodeScene3D_v1.txt`)
-Creates a simple, linear exploded view by moving selected parts along a global axis. This macro directly modifies part positions and is best used within the "Enhanced Scene" workbench to avoid overriding assembly constraints.
+#### 1. Simple 3D Explode Scene (`Vectia_SceneExploder.catvbs`)
+Creates a simple, linear exploded view by moving selected parts along a global axis. This macro directly modifies part positions and is best used within the "Enhanced Scene" workbench.
 *   **How to Use:** Select all parts to be exploded in the specification tree. Run the macro and provide the explosion axis (X, Y, or Z) and the spacing distance.
 
 ---
 
 ## License
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
-## Acknowledgments
-This project was created by [**Your Name / Your GitHub Username**], a Mechanical Design Engineer at Visteon, in collaboration with an advanced AI assistant specializing in CATIA V5 automation.
+This project is licensed under the **MIT License**, which is a permissive open-source license. In simple terms, you are free to use, copy, modify, and distribute this software, but it is provided without warranty. See the `LICENSE` file for full details.
