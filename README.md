@@ -58,11 +58,7 @@ A simple utility for quickly renumbering a series of selected text objects.
 Creates a complete, accurate wireframe bounding box around a selected Body or HybridBody, aligned to a chosen axis system.
 *   **How to Use:** Run the macro and follow the prompts to select the target body and the reference axis system.
 
-#### 2. Extremum Points Creator (`Vectia_ExtremumPointsCreator.catvbs`)
-A focused utility that generates the 6 extremum points (Min/Max for X, Y, Z) for a selected body relative to a reference axis system.
-*   **How to Use:** Run the macro and follow the prompts to select the target body and the reference axis system.
-
-#### 3. Smart Feature Renamer (`Vectia_SmartFeatureRenamer.catvbs`)
+#### 2. Smart Feature Renamer (`Vectia_SmartFeatureRenamer.catvbs`)
 A versatile tool for sequentially renaming any selected features in the specification tree. It intelligently handles leading zeros based on the user's starting number.
 *   **How to Use:** Select the features you want to rename in the desired order. Run the macro and provide a prefix (optional) and a starting number (e.g., `1`, `01`, `001`).
 
