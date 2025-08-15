@@ -32,22 +32,27 @@ The suite is organized by the primary CATIA V5 workbench where the tool is used.
 
 #### 1. Master Text Numbering (`Vectia_MasterTextNumbering.catvbs`)
 The flagship macro for creating visually perfect, associative VVNN numbering. It uses a pre-selected text object as a template, ensuring perfect compliance with any custom graphical standard (including custom frames/oblongs).
+![Vectia Master Text Numbering Demo](./demovideos/Vectia_MasterTextNumbering_v1.0.gif)
 *   **How to Use:** Select your "Master Text" object first, then CTRL+select all target Dimensions/GDTs. Run the macro and follow the prompts.
 
 #### 2. Smart Bault/Upper Text Numbering (`Vectia_BaultTextNumbering.catvbs`)
 An intelligent tool for editing existing drawings. It scans views for the highest existing VVNN number and continues the sequence by modifying the `BaultText` of dimensions or the `Upper Text` of GDTs.
+![Vectia Bault Text Numbering Demo](./demovideos/Vectia_BaultTextNumbering_v1.0.gif)
 *   **How to Use:** Select all target Dimensions and GDTs you wish to number. Run the macro and follow the prompts.
 
 #### 3. Drawing Reset Utility (`Vectia_DrawingResetUtility.catvbs`)
 A powerful cleanup tool for removing specific annotations from a drawing sheet or a single view.
+![Vectia Drawing Reset Utility Demo](./demovideos/Vectia_DrawingResetUtility_v1.0.gif)
 *   **How to Use:** Run the macro and choose from the menu whether to delete VVNN numbering text, revision balloons, or both, and from which scope (active view or all views).
 
 #### 4. Numbering Reset Utility (`Vectia_NumberingResetUtility_v1.0.catvbs`)
 A focused cleanup tool that removes all `[VVNN]` style numbering from the Bault Text of dimensions and the Upper Text of GDTs on the active sheet.
+![Vectia Numbering Reset Utility Demo](./demovideos/Vectia_NumberingResetUtility_v1.0.gif)
 *   **How to Use:** Run the macro and confirm the action.
 
 #### 5. Sequential Text Editor (`Vectia_TextSequenceEditor.catvbs`)
 A simple utility for quickly renumbering a series of selected text objects.
+![Vectia Sequential Text Editor Demo](./demovideos/Vectia_TextSequenceEditor_v1.0.gif)
 *   **How to Use:** Select a series of `DrawingText` objects in the desired order. Run the macro and provide a prefix (optional) and a starting number.
 
 ---
@@ -56,18 +61,20 @@ A simple utility for quickly renumbering a series of selected text objects.
 
 #### 1. Bounding Box Wireframe Creator (`Vectia_BoundingBoxCreator.catvbs`)
 Creates a complete, accurate wireframe bounding box around a selected Body or HybridBody, aligned to a chosen axis system.
+![Vectia Bounding Box Wireframe Creator Demo](./demovideos/Vectia_BoundingBoxCreator_v1.0.gif)
 *   **How to Use:** Run the macro and follow the prompts to select the target body and the reference axis system.
 
 #### 2. Smart Feature Renamer (`Vectia_SmartFeatureRenamer.catvbs`)
 A versatile tool for sequentially renaming any selected features in the specification tree. It intelligently handles leading zeros based on the user's starting number.
+![Vectia Smart Feature Renamer Demo](./demovideos/Vectia_SmartFeatureRenamer_v1.0.gif)
 *   **How to Use:** Select the features you want to rename in the desired order. Run the macro and provide a prefix (optional) and a starting number (e.g., `1`, `01`, `001`).
-
 ---
 
 ### Assembly Design
 
 #### 1. Simple 3D Explode Scene (`Vectia_SceneExploder.catvbs`)
 Creates a simple, linear exploded view by moving selected parts along a global axis. This macro directly modifies part positions and is best used within the "Enhanced Scene" workbench.
+![Vectia Simple 3D Explode Scene Demo](./demovideos/Vectia_SceneExploder_v1.0.gif)
 *   **How to Use:** Select all parts to be exploded in the specification tree. Run the macro and provide the explosion axis (X, Y, or Z) and the spacing distance.
 
 ---
