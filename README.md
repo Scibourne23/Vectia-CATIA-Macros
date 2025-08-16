@@ -30,10 +30,13 @@ The suite is organized by the primary CATIA V5 workbench where the tool is used.
 
 ### Drafting & 2D Annotation
 
-#### 1. Master Text Numbering (`Vectia_MasterTextNumbering.catvbs`)
-The flagship macro for creating visually perfect, associative VVNN numbering. It uses a pre-selected text object as a template, ensuring perfect compliance with any custom graphical standard (including custom frames/oblongs).
+#### 1. Master Text Numbering (`Vectia_MasterTextNumbering_v1.1.catvbs`)
+The flagship macro for creating visually perfect, associative VVNN numbering. It uses a pre-selected text object as a template, ensuring perfect compliance with any custom graphical standard.
+**New in v1.1:** Features dynamic horizontal offsets to perfectly center the numbering text over single, double, and multi-instance dimensions.
 ![Vectia Master Text Numbering Demo](./demovideos/Vectia_MasterTextNumbering_v1.0.gif)
-*   **How to Use:** Select your "Master Text" object first, then CTRL+select all target Dimensions/GDTs. Run the macro and follow the prompts.
+**How to Use:**
+1.  Select your "Master Text" object first, then CTRL+select all target Dimensions/GDTs.
+2.  Run the macro and follow the prompts.
 
 #### 2. Smart Bault/Upper Text Numbering (`Vectia_BaultTextNumbering.catvbs`)
 An intelligent tool for editing existing drawings. It scans views for the highest existing VVNN number and continues the sequence by modifying the `BaultText` of dimensions or the `Upper Text` of GDTs.
