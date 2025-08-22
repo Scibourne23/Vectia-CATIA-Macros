@@ -43,17 +43,22 @@ An intelligent tool for editing existing drawings. It scans views for the highes
 ![Vectia Bault Text Numbering Demo](./demovideos/Vectia_BaultTextNumbering_v1.0.gif)
 *   **How to Use:** Select all target Dimensions and GDTs you wish to number. Run the macro and follow the prompts.
 
-#### 3. Drawing Reset Utility (`Vectia_DrawingResetUtility.catvbs`)
+#### 3. General Tolerancer (ISO 20457) (`Vectia_ApplyTolerances_ISO20457_v1.0.catvbs`)
+An advanced tool that applies general tolerances to all dimensions in a drawing based on the ISO 20457 standard for plastic parts. It recommends a tolerance group based on material and intelligently distinguishes between tool-specific and non-tool-specific dimensions.
+![Vectia General Tolerancer Demo](./demovideos/Vectia_ApplyTolerances_ISO20457_v1.0.gif)
+*   **How to Use:** Run the macro in an active drawing and follow the prompts for material family and tolerance group confirmation.
+
+#### 4. Drawing Reset Utility (`Vectia_DrawingResetUtility.catvbs`)
 A powerful cleanup tool for removing specific annotations from a drawing sheet or a single view.
 ![Vectia Drawing Reset Utility Demo](./demovideos/Vectia_DrawingResetUtility_v1.0.gif)
 *   **How to Use:** Run the macro and choose from the menu whether to delete VVNN numbering text, revision balloons, or both, and from which scope (active view or all views).
 
-#### 4. Numbering Reset Utility (`Vectia_NumberingResetUtility_v1.0.catvbs`)
+#### 5. Numbering Reset Utility (`Vectia_NumberingResetUtility_v1.0.catvbs`)
 A focused cleanup tool that removes all `[VVNN]` style numbering from the Bault Text of dimensions and the Upper Text of GDTs on the active sheet.
 ![Vectia Numbering Reset Utility Demo](./demovideos/Vectia_NumberingResetUtility_v1.0.gif)
 *   **How to Use:** Run the macro and confirm the action.
 
-#### 5. Sequential Text Editor (`Vectia_TextSequenceEditor.catvbs`)
+#### 6. Sequential Text Editor (`Vectia_TextSequenceEditor.catvbs`)
 A simple utility for quickly renumbering a series of selected text objects.
 ![Vectia Sequential Text Editor Demo](./demovideos/Vectia_TextSequenceEditor_v1.0.gif)
 *   **How to Use:** Select a series of `DrawingText` objects in the desired order. Run the macro and provide a prefix (optional) and a starting number.
