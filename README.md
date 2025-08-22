@@ -45,6 +45,7 @@ An intelligent tool for editing existing drawings. It scans views for the highes
 
 #### 3. General Tolerancer (ISO 20457) (`Vectia_ApplyTolerances_ISO20457_v1.0.catvbs`)
 An advanced tool that applies general tolerances to all dimensions in a drawing based on the ISO 20457 standard for plastic parts. It recommends a tolerance group based on material and intelligently distinguishes between tool-specific and non-tool-specific dimensions.
+Please note that this works only for linear dimensions. No support for GD&Ts
 ![Vectia General Tolerancer Demo](./demovideos/Vectia_ApplyTolerances_ISO20457_v1.0.gif)
 *   **How to Use:** Run the macro in an active drawing and follow the prompts for material family and tolerance group confirmation.
 
