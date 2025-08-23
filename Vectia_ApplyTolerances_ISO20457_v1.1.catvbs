@@ -1,18 +1,24 @@
-' CATScript: Vectia_ApplyTolerances_ISO20457_v1.0.catvbs
+' CATScript: Vectia_ApplyTolerances_ISO20457_v1.1.catvbs
 '
 ' Purpose: Applies general tolerances to all dimensions in a CATIA V5 drawing
 '          based on the ISO 20457 standard for plastic parts.
 '
-' Version: 1.0
+' Version: 1.1
 '
-' Features:
-'   - Standard Compliance: Contains embedded tolerance tables for ISO 20457.
-'   - Material-Based Suggestions: Recommends a Master Tolerance Group (TG).
-'   - Context-Aware Application: Distinguishes between Tool-Specific (TW)
-'     and Non-Tool-Specific (NW) dimensions based on a simple color code.
-'   - Fully Automated: Processes all dimensions on all sheets of a drawing.
+' --- Version 1.1 Updates ---
+'   - Added "Preserved Dimension" feature. Any dimension colored GREEN
+'     (RGB 0,255,0) will be safely ignored by the tolerancing engine.
+'   - The optional color reset now intelligently ignores preserved green dimensions.
+'   - Added safety "Guard Clauses" to automatically skip Basic and Reference dimensions.
+'
+' --- Core Features ---
+'   - Standard Compliance, Material-Based Suggestions, Context-Aware Application,
+'     and Fully Automated processing of all drawing sheets.
 
 Option Explicit
+
+' --- CATIA V5 ENUMERATIONS ---
+Const catDimFrameNone = 0
 
 Sub CATMain()
 
@@ -21,7 +27,7 @@ Sub CATMain()
     Dim oCATIA
     Set oCATIA = GetObject(, "CATIA.Application")
     If Err.Number <> 0 Then
-        MsgBox "Error: CATIA Application not found.", vbCritical, "Vectia - Startup Error"
+        MsgBox "Error: CATIA Application not found.", vbCritical, "Vectia - Application Error"
         Exit Sub
     End If
     On Error GoTo 0
@@ -80,15 +86,15 @@ Sub CATMain()
     arrNW_Tolerances(10, 0) = 0.45: arrNW_Tolerances(10, 1) = 0.70: arrNW_Tolerances(10, 2) = 1.15: arrNW_Tolerances(10, 3) = 1.80: arrNW_Tolerances(10, 4) = 2.85
     arrNW_Tolerances(11, 0) = 0.49: arrNW_Tolerances(11, 1) = 0.78: arrNW_Tolerances(11, 2) = 1.25: arrNW_Tolerances(11, 3) = 2.00: arrNW_Tolerances(11, 4) = 3.15
 
-    ' --- USER INPUT & PARAMETER SELECTION ---
-    Dim sPrompt, sUserInput, lngBaselineTG, lngMasterTG
-    sPrompt = "Select Material Family:" & vbCrLf & vbCrLf & "1: PC, PC/ABS (Low Shrink Amorphous)" & vbCrLf & "2: PA-GF, PBT-GF (Stable Crystalline)" & vbCrLf & "3: PP, PP-Talc (High Shrink Commodity)" & vbCrLf & "4: POM, PA66 (Standard Crystalline)" & vbCrLf & "5: PEEK, PPSU (High Performance)"
+    ' --- USER INPUT ---
+    Dim sPrompt, sUserInput, lngBaselineTG, lngMasterTG, iResetColor
+    sPrompt = "Select Material Family:" & vbCrLf & vbCrLf & "1: PC, PC/ABS" & vbCrLf & "2: PA-GF, PBT-GF" & vbCrLf & "3: PP, PP-Talc" & vbCrLf & "4: POM, PA66" & vbCrLf & "5: PEEK, PPSU"
     sUserInput = InputBox(sPrompt, "Vectia - General Tolerancer - Step 1: Material Selection")
     If sUserInput = "" Or Not dictMaterialMap.Exists(sUserInput) Then Exit Sub
     
     lngBaselineTG = dictMaterialMap(sUserInput)
     
-    sPrompt = "The recommended Master Tolerance Group for this material family is TG" & lngBaselineTG & "." & vbCrLf & vbCrLf & "Press OK to accept, or enter a different TG (4-8) to override."
+    sPrompt = "The recommended Master Tolerance Group for this material is TG" & lngBaselineTG & "." & vbCrLf & vbCrLf & "Press OK to accept, or enter a different TG (4-8)."
     sUserInput = InputBox(sPrompt, "Vectia - General Tolerancer - Step 2: Confirm TG", lngBaselineTG)
     If sUserInput = "" Then Exit Sub
     
@@ -98,36 +104,68 @@ Sub CATMain()
         Exit Sub
     End If
 
+    sPrompt = "After applying tolerances, reset the color of all processed dimensions back to black?" & vbCrLf & vbCrLf & _
+              "YES = Reset processed dimensions to black." & vbCrLf & _
+              "NO = Keep blue colors as visual indicators."
+    iResetColor = MsgBox(sPrompt, vbYesNo + vbQuestion, "Vectia - General Tolerancer - Step 3: Color Reset")
+
+
     ' --- MAIN PROCESSING LOOP ---
     Dim oSheets, oSheet, oViews, oView, oDims, oDim, dblTol, dblRoundedTol
-    Dim iBlueCount, iDefaultCount, oVisProps, lRed, lGreen, lBlue, arrCurrentTable
-    iBlueCount = 0: iDefaultCount = 0
+    Dim iBlueCount, iDefaultCount, iGreenCount, oVisProps, lRed, lGreen, lBlue, arrCurrentTable
+    iBlueCount = 0: iDefaultCount = 0: iGreenCount = 0
     Set oSheets = oDrawingDoc.Sheets
     
     For Each oSheet In oSheets
-        For Each oView In oSheet.Views
+        Set oViews = oSheet.Views
+        For Each oView In oViews
             Set oDims = oView.Dimensions
             If oDims.Count > 0 Then
                 For Each oDim In oDims
                     If InStr(TypeName(oDim), "DrawingDimension") > 0 Then
+                        
+                        ' First, get the color of the dimension
                         oSelection.Clear
                         oSelection.Add oDim
                         Set oVisProps = oSelection.VisProperties
                         oVisProps.GetRealColor lRed, lGreen, lBlue
                         
-                        If lRed = 0 And lGreen = 0 And lBlue = 255 Then ' If PURE BLUE
-                            arrCurrentTable = arrNW_Tolerances
-                            iBlueCount = iBlueCount + 1
+                        ' Guard Clause 1: Ignore Preserved (Green) Dimensions
+                        If lRed = 0 And lGreen = 255 And lBlue = 0 Then
+                            iGreenCount = iGreenCount + 1
+                        ' Guard Clause 2: Ignore Basic Dimensions
+                        ElseIf oDim.ValueFrame <> catDimFrameNone Then
+                            ' Do nothing
                         Else
-                            arrCurrentTable = arrTW_Tolerances
-                            iDefaultCount = iDefaultCount + 1
-                        End If
-                        
-                        dblTol = GetToleranceValue(oDim.GetValue.Value, lngMasterTG, arrNominalRanges, arrCurrentTable)
-                        If dblTol > 0 Then
-                            dblRoundedTol = RoundToNearest05(dblTol)
-                            oDim.SetTolerances 1, "ANS_NUM2", "", "", dblRoundedTol, -dblRoundedTol, 0
-                        End If
+                            Dim oDimValue
+                            Set oDimValue = oDim.GetValue
+                            Dim sBeforeText, sAfterText, sUpperText, sLowerText
+                            oDimValue.GetBaultText 1, sBeforeText, sAfterText, sUpperText, sLowerText
+
+                            ' Guard Clause 3: Ignore Reference Dimensions
+                            If InStr(sBeforeText, "(") = 0 And InStr(sAfterText, ")") = 0 Then
+                                
+                                ' Color-based logic to select the correct tolerance table
+                                If lRed = 0 And lGreen = 0 And lBlue = 255 Then ' If PURE BLUE
+                                    arrCurrentTable = arrNW_Tolerances
+                                    iBlueCount = iBlueCount + 1
+                                Else ' For any other color (Black, default, etc.)
+                                    arrCurrentTable = arrTW_Tolerances
+                                    iDefaultCount = iDefaultCount + 1
+                                End If
+                                
+                                dblTol = GetToleranceValue(oDimValue.Value, lngMasterTG, arrNominalRanges, arrCurrentTable)
+                                If dblTol > 0 Then
+                                    dblRoundedTol = RoundToNearest05(dblTol)
+                                    oDim.SetTolerances 1, "ANS_NUM2", "", "", dblRoundedTol, -dblRoundedTol, 0
+                                    
+                                    ' Optional Color Reset
+                                    If iResetColor = vbYes Then
+                                        Call SetObjectColor(oDim, oSelection, 0, 0, 0)
+                                    End If
+                                End If
+                            End If ' End Reference Dimension check
+                        End If ' End Green/Basic Dimension check
                     End If
                 Next
             End If
@@ -139,21 +177,24 @@ Sub CATMain()
     oCATIA.RefreshDisplay = True
 
     Dim sFinalMsg
-    sFinalMsg = "General Tolerancing Complete." & vbCrLf & vbCrLf & _
-                "Applied Master TG" & lngMasterTG & " to the following dimensions:" & vbCrLf & _
-                "  - " & iBlueCount & " Non-Tool-Specific (NW) from BLUE dimensions." & vbCrLf & _
-                "  - " & iDefaultCount & " Tool-Specific (TW) from all other dimensions." & vbCrLf & vbCrLf & _
-                "-------------------- ACTION REQUIRED --------------------" & vbCrLf & _
-                "A safe, TIGHT baseline tolerance has been applied to all non-blue dimensions." & vbCrLf & vbCrLf & _
-                "The engineer MUST now manually review and apply specific, customer-driven requirements to all CRITICAL dimensions."
+    sFinalMsg = "Tolerancing Complete." & vbCrLf & vbCrLf & _
+                "Applied Master TG" & lngMasterTG & " to:" & vbCrLf & _
+                "  - " & iBlueCount & " Non-Tool-Specific (NW) dimensions." & vbCrLf & _
+                "  - " & iDefaultCount & " Tool-Specific (TW) dimensions." & vbCrLf & vbCrLf & _
+                "Safely ignored " & iGreenCount & " preserved (Green) dimensions." & vbCrLf
+    
+    If iResetColor = vbYes Then
+        sFinalMsg = sFinalMsg & vbCrLf & "All " & iBlueCount + iDefaultCount & " processed dimensions have been reset to black." & vbCrLf
+    End If
+                
+    sFinalMsg = sFinalMsg & vbCrLf & "-------------------- ACTION REQUIRED --------------------" & vbCrLf & _
+                "Basic and Reference Dimensions were also safely ignored." & vbCrLf & _
+                "The engineer MUST now manually review and apply specific requirements to all CRITICAL dimensions."
 
-    MsgBox sFinalMsg, vbInformation, "Vectia - Macro Finished"
+    MsgBox sFinalMsg, vbInformation, "Vectia - Process Finished"
 
 End Sub
 
-' ###############################################################################
-' #                            HELPER FUNCTIONS                                 #
-' ###############################################################################
 
 Private Function GetToleranceValue(ByVal dblNominal, ByVal lngTargetTG, ByRef arrRanges, ByRef arrTols)
     ' This function looks up the correct tolerance from the corresponding array
@@ -184,3 +225,23 @@ Private Function RoundToNearest05(ByVal dblValue)
         RoundToNearest05 = Round(dblValue / 0.05, 0) * 0.05
     End If
 End Function
+
+Private Sub SetObjectColor(ByVal iObjectToColor, ByVal iSelection, ByVal R, ByVal G, ByVal B)
+    ' This is a universal helper subroutine to set the color of a given object.
+    On Error Resume Next
+    
+    iSelection.Clear
+    iSelection.Add iObjectToColor
+    
+    Dim oVisProps
+    Set oVisProps = iSelection.VisProperties
+    
+    ' SetRealColor(Red, Green, Blue, InheritanceFlag), 0 = Force Color
+    oVisProps.SetRealColor R, G, B, 0
+    
+    If Err.Number <> 0 Then
+        Err.Clear
+    End If
+    
+    On Error GoTo 0
+End Sub
